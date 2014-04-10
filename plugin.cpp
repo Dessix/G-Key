@@ -33,7 +33,7 @@ struct TS3Functions ts3Functions;
 GKeyFunctions gkeyFunctions;
 TS3Settings ts3Settings;
 
-#define PLUGIN_API_VERSION 19
+#define PLUGIN_API_VERSION 20
 
 #define PATH_BUFSIZE 512
 #define COMMAND_BUFSIZE 128
@@ -55,8 +55,7 @@ char* pluginID = NULL;
 bool pluginRunning = false;
 
 // Error codes
-enum PluginError
-{
+enum PluginError {
 	PLUGIN_ERROR_NONE = 0,
 	PLUGIN_ERROR_HOOK_FAILED,
 	PLUGIN_ERROR_READ_FAILED,
@@ -79,20 +78,16 @@ typedef int (WINAPI *ProcessCommandProc)(uint64, const char*);
 
 /*********************************** Plugin error handlers ************************************/
 
-bool IsConnected(uint64 scHandlerID)
-{
-	if(gkeyFunctions.GetConnectionStatus(scHandlerID) == STATUS_DISCONNECTED)
-	{
+bool IsConnected(uint64 scHandlerID) {
+	if (gkeyFunctions.GetConnectionStatus(scHandlerID) == STATUS_DISCONNECTED) {
 		gkeyFunctions.ErrorMessage(scHandlerID, "Not connected to server");
 		return false;
 	}
 	return true;
 }
 
-inline bool IsArgumentEmpty(uint64 scHandlerID, char* arg)
-{
-	if(arg == NULL && *arg == (char)NULL)
-	{
+inline bool IsArgumentEmpty(uint64 scHandlerID, char* arg) {
+	if (arg == NULL && *arg == (char)NULL) {
 		gkeyFunctions.ErrorMessage(scHandlerID, "Missing argument");
 		return true;
 	}
@@ -101,62 +96,54 @@ inline bool IsArgumentEmpty(uint64 scHandlerID, char* arg)
 
 /*********************************** Plugin callbacks ************************************/
 
-VOID CALLBACK PTTDelayCallback(LPVOID lpArgToCompletionRoutine,DWORD dwTimerLowValue,DWORD dwTimerHighValue)
-{
+VOID CALLBACK PTTDelayCallback(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue) {
 	// Acquire the mutex
 	WaitForSingleObject(hMutex, PLUGIN_THREAD_TIMEOUT);
 
 	// Turn off PTT
 	gkeyFunctions.SetPushToTalk(gkeyFunctions.GetActiveServerConnectionHandlerID(), false);
-	
+
 	// Release the mutex
 	ReleaseMutex(hMutex);
 }
 
 /*********************************** Plugin functions ************************************/
 
-bool ExecutePluginCommand(uint64 scHandlerID, char* keyword, char* command)
-{
+bool ExecutePluginCommand(uint64 scHandlerID, char* keyword, char* command) {
 	// Get the plugin list
 	std::vector<std::string> plugins;
-	if(!ts3Settings.GetEnabledPlugins(plugins)) return false;
+	if (!ts3Settings.GetEnabledPlugins(plugins)) return false;
 
 	// Iterate the plugins looking for the one that can provide the keyword
-	for(std::vector<std::string>::iterator it=plugins.begin(); it!=plugins.end(); it++)
-	{
+	for (std::vector<std::string>::iterator it = plugins.begin(); it != plugins.end(); it++) {
 		// Get the module handle
 		HMODULE pluginModule = GetModuleHandle(it->c_str());
-		
+
 		// Module not found, try to guess the correct module name
-		if(pluginModule == NULL)
-		{
+		if (pluginModule == NULL) {
 			// A list of suffixes a plugin can have based on the architecture (64bit vs 32bit).
 			// For some reason the linux, mac and powerpc suffixes are not ignored on windows.
-			#ifdef ARCH_X86_32
-				char* suffixes[] = { "_win32", "_x86", "_32", "_i386", "_linux_x86", "_mac", "_ppc" };
-			#endif
-			#ifdef ARCH_X86_64
-				char* suffixes[] = { "_win64", "_amd64", "_64", "_linux_amd64", "_mac", "_ppc" };
-			#endif
+#ifdef ARCH_X86_32
+			char* suffixes[] = { "_win32", "_x86", "_32", "_i386", "_linux_x86", "_mac", "_ppc" };
+#endif
+#ifdef ARCH_X86_64
+			char* suffixes[] = { "_win64", "_amd64", "_64", "_linux_amd64", "_mac", "_ppc" };
+#endif
 
-			for(int i=0; pluginModule == NULL && i<sizeof(suffixes); i++)
-			{
+			for (int i = 0; pluginModule == NULL && i < sizeof(suffixes); i++) {
 				std::string moduleName = (*it) + suffixes[i];
 				pluginModule = GetModuleHandle(moduleName.c_str());
 			}
 		}
 
 		// If the module was found
-		if(pluginModule != NULL)
-		{
+		if (pluginModule != NULL) {
 			// Check if the keyword matches
 			CommandKeywordProc pCommandKeyword = (CommandKeywordProc)GetProcAddress(pluginModule, "ts3plugin_commandKeyword");
-			if(pCommandKeyword != NULL && !strcmp(pCommandKeyword(), keyword))
-			{
+			if (pCommandKeyword != NULL && !strcmp(pCommandKeyword(), keyword)) {
 				// Execute the command
 				ProcessCommandProc pProcessCommand = (ProcessCommandProc)GetProcAddress(pluginModule, "ts3plugin_processCommand");
-				if(pProcessCommand != NULL)
-				{
+				if (pProcessCommand != NULL) {
 					pProcessCommand(scHandlerID, command);
 					return true;
 				}
@@ -166,11 +153,10 @@ bool ExecutePluginCommand(uint64 scHandlerID, char* keyword, char* command)
 	return false;
 }
 
-bool SetInfoIcon()
-{
+bool SetInfoIcon() {
 	// Find the icon pack
 	std::string iconPack;
-	if(!ts3Settings.GetIconPack(iconPack)) return false;
+	if (!ts3Settings.GetIconPack(iconPack)) return false;
 
 	// Find the path to the skin
 	char path[MAX_PATH];
@@ -184,11 +170,10 @@ bool SetInfoIcon()
 	return true;
 }
 
-bool SetErrorSound()
-{
+bool SetErrorSound() {
 	// Find the sound pack
 	std::string soundPack;
-	if(!ts3Settings.GetSoundPack(soundPack)) return false;
+	if (!ts3Settings.GetSoundPack(soundPack)) return false;
 
 	// Find the path to the soundpack
 	char path[MAX_PATH];
@@ -203,11 +188,11 @@ bool SetErrorSound()
 	// Parse the config file for the sound file
 	char file[MAX_PATH];
 	int size = GetPrivateProfileString("soundfiles", "SERVER_ERROR", NULL, file, MAX_PATH, config.c_str());
-	if(size == 0) return false;
+	if (size == 0) return false;
 
 	// Filter out the filename: play("file.wav")
 	*(strrchr(file, '\"')) = NULL;
-	ss << '/' << strchr(file, '\"')+1;
+	ss << '/' << strchr(file, '\"') + 1;
 
 	// Commit the path
 	gkeyFunctions.errorSound = ss.str();
@@ -215,518 +200,368 @@ bool SetErrorSound()
 	return true;
 }
 
-bool PTTDelay()
-{
+bool PTTDelay() {
 	// Get default capture profile and preprocessor data
 	std::string data;
-	if(!ts3Settings.GetPreProcessorData(gkeyFunctions.GetDefaultCaptureProfile(), data)) return false;
-	if(ts3Settings.GetValueFromData(data, "delay_ptt") != "true") return false;
+	if (!ts3Settings.GetPreProcessorData(gkeyFunctions.GetDefaultCaptureProfile(), data)) return false;
+	if (ts3Settings.GetValueFromData(data, "delay_ptt") != "true") return false;
 	int msecs = atoi(ts3Settings.GetValueFromData(data, "delay_ptt_msecs").c_str());
 
 	// If a delay is configured, set the PTT delay timer
-	if(msecs > 0)
-	{
+	if (msecs > 0) {
 		dueTime.QuadPart = -(msecs * TIMER_MSEC);
-		SetWaitableTimer(hPttDelayTimer, &dueTime, 0, PTTDelayCallback, NULL, FALSE);
+		//SetWaitableTimer(hPttDelayTimer, &dueTime, 0, PTTDelayCallback, NULL, FALSE);
+		Sleep(msecs);
+		PTTDelayCallback(NULL, NULL, NULL);
 		return true;
 	}
 
 	return false;
 }
+void ParseCommandStupid(char*, char*);
 
-void ParseCommand(char* cmd, char* arg)
-{
+//Substitute for the terrible programmer who didn't understand const-correctness
+void ParseCommand(const char* cmd, const char* arg) {
+	ParseCommandStupid(const_cast<char*>(std::string(cmd).c_str()), const_cast<char*>(std::string(arg).c_str()));
+}
+
+void ParseCommandStupid(char* cmd, char* arg) {
 	// Acquire the mutex
-	if(WaitForSingleObject(hMutex, PLUGIN_THREAD_TIMEOUT) != WAIT_OBJECT_0)
-	{
+	if (WaitForSingleObject(hMutex, PLUGIN_THREAD_TIMEOUT) != WAIT_OBJECT_0) {
 		ts3Functions.logMessage("Timeout while waiting for mutex", LogLevel_WARNING, "G-Key Plugin", 0);
 		return;
 	}
 
 	// Get the active server
 	uint64 scHandlerID = gkeyFunctions.GetActiveServerConnectionHandlerID();
-	if(scHandlerID == NULL)
-	{
+	if (scHandlerID == NULL) {
 		ts3Functions.logMessage("Failed to get an active server, falling back to current server", LogLevel_DEBUG, "G-Key Plugin", 0);
 		scHandlerID = ts3Functions.getCurrentServerConnectionHandlerID();
 	}
 
 	/***** Communication *****/
-	if(!strcmp(cmd, "TS3_PTT_ACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
-		{
+	if (!strcmp(cmd, "TS3_PTT_ACTIVATE")) {
+		//ts3Functions.logMessage("ACTIVATE", LogLevel_INFO, "G-Key Plugin", 0);
+		if (IsConnected(scHandlerID)) {
 			CancelWaitableTimer(hPttDelayTimer);
 			gkeyFunctions.SetPushToTalk(scHandlerID, true);
+			//ts3Functions.logMessage("ACTIVATED", LogLevel_INFO, "G-Key Plugin", 0);
 		}
-	}
-	else if(!strcmp(cmd, "TS3_PTT_DEACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
-		{
-			if(!PTTDelay()) // If query failed
+	} else if (!strcmp(cmd, "TS3_PTT_DEACTIVATE")) {
+		//ts3Functions.logMessage("DEACTIVATE", LogLevel_INFO, "G-Key Plugin", 0);
+		if (IsConnected(scHandlerID)) {
+			//ts3Functions.logMessage("DEACTIVATION", LogLevel_INFO, "G-Key Plugin", 0);
+			if (!PTTDelay()) {// If query failed
 				gkeyFunctions.SetPushToTalk(scHandlerID, false);
+				//ts3Functions.logMessage("DEACTIVATED", LogLevel_INFO, "G-Key Plugin", 0);
+			}
 		}
-	}
-	else if(!strcmp(cmd, "TS3_PTT_TOGGLE"))
-	{
-		if(IsConnected(scHandlerID))
-		{
-			if(gkeyFunctions.pttActive) CancelWaitableTimer(hPttDelayTimer);
+	} else if (!strcmp(cmd, "TS3_PTT_TOGGLE")) {
+		if (IsConnected(scHandlerID)) {
+			if (gkeyFunctions.pttActive) CancelWaitableTimer(hPttDelayTimer);
 			gkeyFunctions.SetPushToTalk(scHandlerID, !gkeyFunctions.pttActive);
 		}
-	}
-	else if(!strcmp(cmd, "TS3_VAD_ACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_VAD_ACTIVATE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetVoiceActivation(scHandlerID, true);
-	}
-	else if(!strcmp(cmd, "TS3_VAD_DEACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_VAD_DEACTIVATE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetVoiceActivation(scHandlerID, false);
-	}
-	else if(!strcmp(cmd, "TS3_VAD_TOGGLE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_VAD_TOGGLE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetVoiceActivation(scHandlerID, !gkeyFunctions.vadActive);
-	}
-	else if(!strcmp(cmd, "TS3_CT_ACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_CT_ACTIVATE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetContinuousTransmission(scHandlerID, true);
-	}
-	else if(!strcmp(cmd, "TS3_CT_DEACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_CT_DEACTIVATE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetContinuousTransmission(scHandlerID, false);
-	}
-	else if(!strcmp(cmd, "TS3_CT_TOGGLE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_CT_TOGGLE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetContinuousTransmission(scHandlerID, !gkeyFunctions.inputActive);
-	}
-	else if(!strcmp(cmd, "TS3_INPUT_MUTE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_INPUT_MUTE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetInputMute(scHandlerID, true);
-	}
-	else if(!strcmp(cmd, "TS3_INPUT_UNMUTE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_INPUT_UNMUTE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetInputMute(scHandlerID, false);
-	}
-	else if(!strcmp(cmd, "TS3_INPUT_TOGGLE"))
-	{
-		if(IsConnected(scHandlerID))
-		{
+	} else if (!strcmp(cmd, "TS3_INPUT_TOGGLE")) {
+		if (IsConnected(scHandlerID)) {
 			int muted;
 			ts3Functions.getClientSelfVariableAsInt(scHandlerID, CLIENT_INPUT_MUTED, &muted);
 			gkeyFunctions.SetInputMute(scHandlerID, !muted);
 		}
-	}
-	else if(!strcmp(cmd, "TS3_OUTPUT_MUTE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_OUTPUT_MUTE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetOutputMute(scHandlerID, true);
-	}
-	else if(!strcmp(cmd, "TS3_OUTPUT_UNMUTE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_OUTPUT_UNMUTE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetOutputMute(scHandlerID, false);
-	}
-	else if(!strcmp(cmd, "TS3_OUTPUT_TOGGLE"))
-	{
-		if(IsConnected(scHandlerID))
-		{
+	} else if (!strcmp(cmd, "TS3_OUTPUT_TOGGLE")) {
+		if (IsConnected(scHandlerID)) {
 			int muted;
 			ts3Functions.getClientSelfVariableAsInt(scHandlerID, CLIENT_OUTPUT_MUTED, &muted);
 			gkeyFunctions.SetOutputMute(scHandlerID, !muted);
 		}
 	}
 	/***** Server interaction *****/
-	else if(!strcmp(cmd, "TS3_AWAY_ZZZ"))
-	{
+	else if (!strcmp(cmd, "TS3_AWAY_ZZZ")) {
 		gkeyFunctions.SetAway(scHandlerID, true, arg);
-	}
-	else if(!strcmp(cmd, "TS3_AWAY_NONE"))
-	{
+	} else if (!strcmp(cmd, "TS3_AWAY_NONE")) {
 		gkeyFunctions.SetAway(scHandlerID, false);
-	}
-	else if(!strcmp(cmd, "TS3_AWAY_TOGGLE"))
-	{
+	} else if (!strcmp(cmd, "TS3_AWAY_TOGGLE")) {
 		int away;
 		ts3Functions.getClientSelfVariableAsInt(scHandlerID, CLIENT_AWAY, &away);
 		gkeyFunctions.SetAway(scHandlerID, !away, arg);
-	}
-	else if(!strcmp(cmd, "TS3_GLOBALAWAY_ZZZ"))
-	{
+	} else if (!strcmp(cmd, "TS3_GLOBALAWAY_ZZZ")) {
 		gkeyFunctions.SetGlobalAway(true, arg);
-	}
-	else if(!strcmp(cmd, "TS3_GLOBALAWAY_NONE"))
-	{
+	} else if (!strcmp(cmd, "TS3_GLOBALAWAY_NONE")) {
 		gkeyFunctions.SetGlobalAway(false);
-	}
-	else if(!strcmp(cmd, "TS3_GLOBALAWAY_TOGGLE"))
-	{
+	} else if (!strcmp(cmd, "TS3_GLOBALAWAY_TOGGLE")) {
 		int away;
 		ts3Functions.getClientSelfVariableAsInt(scHandlerID, CLIENT_AWAY, &away);
 		gkeyFunctions.SetGlobalAway(!away, arg);
-	}
-	else if(!strcmp(cmd, "TS3_ACTIVATE_SERVER"))
-	{
-		if(!IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_ACTIVATE_SERVER")) {
+		if (!IsArgumentEmpty(scHandlerID, arg)) {
 			uint64 handle = gkeyFunctions.GetServerHandleByVariable(arg, VIRTUALSERVER_NAME);
-			if(handle != (uint64)NULL && handle != scHandlerID)
-			{
+			if (handle != (uint64)NULL && handle != scHandlerID) {
 				CancelWaitableTimer(hPttDelayTimer);
 				gkeyFunctions.SetActiveServer(handle);
-			}
-			else gkeyFunctions.ErrorMessage(scHandlerID, "Server not found");
+			} else gkeyFunctions.ErrorMessage(scHandlerID, "Server not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_ACTIVATE_SERVERID"))
-	{
-		if(!IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_ACTIVATE_SERVERID")) {
+		if (!IsArgumentEmpty(scHandlerID, arg)) {
 			uint64 handle = gkeyFunctions.GetServerHandleByVariable(arg, VIRTUALSERVER_UNIQUE_IDENTIFIER);
-			if(handle != (uint64)NULL)
-			{
+			if (handle != (uint64)NULL) {
 				CancelWaitableTimer(hPttDelayTimer);
 				gkeyFunctions.SetActiveServer(handle);
-			}
-			else gkeyFunctions.ErrorMessage(scHandlerID, "Server not found");
+			} else gkeyFunctions.ErrorMessage(scHandlerID, "Server not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_ACTIVATE_SERVERIP"))
-	{
-		if(!IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_ACTIVATE_SERVERIP")) {
+		if (!IsArgumentEmpty(scHandlerID, arg)) {
 			uint64 handle = gkeyFunctions.GetServerHandleByVariable(arg, VIRTUALSERVER_IP);
-			if(handle != (uint64)NULL)
-			{
+			if (handle != (uint64)NULL) {
 				CancelWaitableTimer(hPttDelayTimer);
 				gkeyFunctions.SetActiveServer(handle);
-			}
-			else gkeyFunctions.ErrorMessage(scHandlerID, "Server not found");
+			} else gkeyFunctions.ErrorMessage(scHandlerID, "Server not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_ACTIVATE_CURRENT"))
-	{
+	} else if (!strcmp(cmd, "TS3_ACTIVATE_CURRENT")) {
 		uint64 handle = ts3Functions.getCurrentServerConnectionHandlerID();
-		if(handle != (uint64)NULL)
-		{
+		if (handle != (uint64)NULL) {
 			CancelWaitableTimer(hPttDelayTimer);
 			gkeyFunctions.SetActiveServer(handle);
-		}
-		else gkeyFunctions.ErrorMessage(scHandlerID, "Server not found");
-	}
-	else if(!strcmp(cmd, "TS3_SERVER_NEXT"))
-	{
+		} else gkeyFunctions.ErrorMessage(scHandlerID, "Server not found");
+	} else if (!strcmp(cmd, "TS3_SERVER_NEXT")) {
 		CancelWaitableTimer(hPttDelayTimer);
 		gkeyFunctions.SetNextActiveServer(scHandlerID);
-	}
-	else if(!strcmp(cmd, "TS3_SERVER_PREV"))
-	{
+	} else if (!strcmp(cmd, "TS3_SERVER_PREV")) {
 		CancelWaitableTimer(hPttDelayTimer);
 		gkeyFunctions.SetPrevActiveServer(scHandlerID);
-	}
-	else if(!strcmp(cmd, "TS3_JOIN_CHANNEL"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_JOIN_CHANNEL")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			uint64 id = gkeyFunctions.GetChannelIDFromPath(scHandlerID, arg);
-			if(id == (uint64)NULL) id = gkeyFunctions.GetChannelIDByVariable(scHandlerID, arg, CHANNEL_NAME);
-			if(id != (uint64)NULL) gkeyFunctions.JoinChannel(scHandlerID, id);
+			if (id == (uint64)NULL) id = gkeyFunctions.GetChannelIDByVariable(scHandlerID, arg, CHANNEL_NAME);
+			if (id != (uint64)NULL) gkeyFunctions.JoinChannel(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Channel not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_JOIN_CHANNELID"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_JOIN_CHANNELID")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			uint64 id = atoi(arg);
-			if(id != (uint64)NULL) gkeyFunctions.JoinChannel(scHandlerID, id);
+			if (id != (uint64)NULL) gkeyFunctions.JoinChannel(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Channel not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_CHANNEL_NEXT"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_CHANNEL_NEXT")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.JoinNextChannel(scHandlerID);
-	}
-	else if(!strcmp(cmd, "TS3_CHANNEL_PREV"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_CHANNEL_PREV")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.JoinPrevChannel(scHandlerID);
-	}
-	else if(!strcmp(cmd, "TS3_KICK_CLIENT"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_KICK_CLIENT")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_NICKNAME);
-			if(id != (anyID)NULL) gkeyFunctions.ServerKickClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.ServerKickClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_KICK_CLIENTID"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_KICK_CLIENTID")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_UNIQUE_IDENTIFIER);
-			if(id != (anyID)NULL) gkeyFunctions.ServerKickClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.ServerKickClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_CHANKICK_CLIENT"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_CHANKICK_CLIENT")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_NICKNAME);
-			if(id != (anyID)NULL) gkeyFunctions.ChannelKickClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.ChannelKickClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_CHANKICK_CLIENTID"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_CHANKICK_CLIENTID")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_UNIQUE_IDENTIFIER);
-			if(id != (anyID)NULL) gkeyFunctions.ChannelKickClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.ChannelKickClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_BOOKMARK_CONNECT"))
-	{
-		if(!IsArgumentEmpty(scHandlerID, arg))
+	} else if (!strcmp(cmd, "TS3_BOOKMARK_CONNECT")) {
+		if (!IsArgumentEmpty(scHandlerID, arg))
 			gkeyFunctions.ConnectToBookmark(arg, PLUGIN_CONNECT_TAB_NEW_IF_CURRENT_CONNECTED, &scHandlerID);
 	}
 	/***** Whispering *****/
-	else if(!strcmp(cmd, "TS3_WHISPER_ACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
+	else if (!strcmp(cmd, "TS3_WHISPER_ACTIVATE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetWhisperList(scHandlerID, TRUE);
-	}
-	else if(!strcmp(cmd, "TS3_WHISPER_DEACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_WHISPER_DEACTIVATE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetWhisperList(scHandlerID, FALSE);
-	}
-	else if(!strcmp(cmd, "TS3_WHISPER_TOGGLE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_WHISPER_TOGGLE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetWhisperList(scHandlerID, !gkeyFunctions.whisperActive);
-	}
-	else if(!strcmp(cmd, "TS3_WHISPER_CLEAR"))
-	{
+	} else if (!strcmp(cmd, "TS3_WHISPER_CLEAR")) {
 		gkeyFunctions.WhisperListClear(scHandlerID);
-	}
-	else if(!strcmp(cmd, "TS3_WHISPER_CLIENT"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_WHISPER_CLIENT")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_NICKNAME);
-			if(id != (anyID)NULL) gkeyFunctions.WhisperAddClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.WhisperAddClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_WHISPER_CLIENTID"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_WHISPER_CLIENTID")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_UNIQUE_IDENTIFIER);
-			if(id != (anyID)NULL) gkeyFunctions.WhisperAddClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.WhisperAddClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_WHISPER_CHANNEL"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_WHISPER_CHANNEL")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			uint64 id = gkeyFunctions.GetChannelIDFromPath(scHandlerID, arg);
-			if(id == (uint64)NULL) id = gkeyFunctions.GetChannelIDByVariable(scHandlerID, arg, CHANNEL_NAME);
-			if(id != (uint64)NULL) gkeyFunctions.WhisperAddChannel(scHandlerID, id);
+			if (id == (uint64)NULL) id = gkeyFunctions.GetChannelIDByVariable(scHandlerID, arg, CHANNEL_NAME);
+			if (id != (uint64)NULL) gkeyFunctions.WhisperAddChannel(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Channel not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_WHISPER_CHANNELID"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_WHISPER_CHANNELID")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			uint64 id = atoi(arg);
-			if(id != (uint64)NULL) gkeyFunctions.WhisperAddChannel(scHandlerID, id);
+			if (id != (uint64)NULL) gkeyFunctions.WhisperAddChannel(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Channel not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_REPLY_ACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_REPLY_ACTIVATE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetReplyList(scHandlerID, TRUE);
-	}
-	else if(!strcmp(cmd, "TS3_REPLY_DEACTIVATE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_REPLY_DEACTIVATE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetReplyList(scHandlerID, FALSE);
-	}
-	else if(!strcmp(cmd, "TS3_REPLY_TOGGLE"))
-	{
-		if(IsConnected(scHandlerID))
+	} else if (!strcmp(cmd, "TS3_REPLY_TOGGLE")) {
+		if (IsConnected(scHandlerID))
 			gkeyFunctions.SetReplyList(scHandlerID, !gkeyFunctions.replyActive);
-	}
-	else if(!strcmp(cmd, "TS3_REPLY_CLEAR"))
-	{
+	} else if (!strcmp(cmd, "TS3_REPLY_CLEAR")) {
 		gkeyFunctions.ReplyListClear(scHandlerID);
 	}
 	/***** Miscellaneous *****/
-	else if(!strcmp(cmd, "TS3_MUTE_CLIENT"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	else if (!strcmp(cmd, "TS3_MUTE_CLIENT")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_NICKNAME);
-			if(id != (anyID)NULL) gkeyFunctions.MuteClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.MuteClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_MUTE_CLIENTID"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_MUTE_CLIENTID")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_UNIQUE_IDENTIFIER);
-			if(id != (anyID)NULL) gkeyFunctions.MuteClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.MuteClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_UNMUTE_CLIENT"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_UNMUTE_CLIENT")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_NICKNAME);
-			if(id != (anyID)NULL) gkeyFunctions.UnmuteClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.UnmuteClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_UNMUTE_CLIENTID"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_UNMUTE_CLIENTID")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_UNIQUE_IDENTIFIER);
-			if(id != (anyID)NULL) gkeyFunctions.UnmuteClient(scHandlerID, id);
+			if (id != (anyID)NULL) gkeyFunctions.UnmuteClient(scHandlerID, id);
 			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_MUTE_TOGGLE_CLIENT"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_MUTE_TOGGLE_CLIENT")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_NICKNAME);
-			if(id != (anyID)NULL)
-			{
+			if (id != (anyID)NULL) {
 				int muted;
 				ts3Functions.getClientVariableAsInt(scHandlerID, id, CLIENT_IS_MUTED, &muted);
-				if(!muted) gkeyFunctions.MuteClient(scHandlerID, id);
+				if (!muted) gkeyFunctions.MuteClient(scHandlerID, id);
 				else gkeyFunctions.UnmuteClient(scHandlerID, id);
-			}
-			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
+			} else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_MUTE_TOGGLE_CLIENTID"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_MUTE_TOGGLE_CLIENTID")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			anyID id = gkeyFunctions.GetClientIDByVariable(scHandlerID, arg, CLIENT_UNIQUE_IDENTIFIER);
-			if(id != (anyID)NULL)
-			{
+			if (id != (anyID)NULL) {
 				int muted;
 				ts3Functions.getClientVariableAsInt(scHandlerID, id, CLIENT_IS_MUTED, &muted);
-				if(!muted) gkeyFunctions.MuteClient(scHandlerID, id);
+				if (!muted) gkeyFunctions.MuteClient(scHandlerID, id);
 				else gkeyFunctions.UnmuteClient(scHandlerID, id);
-			}
-			else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
+			} else gkeyFunctions.ErrorMessage(scHandlerID, "Client not found");
 		}
-	}
-	else if(!strcmp(cmd, "TS3_VOLUME_UP"))
-	{
-		if(IsConnected(scHandlerID))
-		{
-			float diff = (arg!=NULL && *arg != (char)NULL)?(float)atof(arg):1.0f;
+	} else if (!strcmp(cmd, "TS3_VOLUME_UP")) {
+		if (IsConnected(scHandlerID)) {
+			float diff = (arg != NULL && *arg != (char)NULL) ? (float)atof(arg) : 1.0f;
 			float value;
 			ts3Functions.getPlaybackConfigValueAsFloat(scHandlerID, "volume_modifier", &value);
-			gkeyFunctions.SetMasterVolume(scHandlerID, value+diff);
+			gkeyFunctions.SetMasterVolume(scHandlerID, value + diff);
 		}
-	}
-	else if(!strcmp(cmd, "TS3_VOLUME_DOWN"))
-	{
-		if(IsConnected(scHandlerID))
-		{
-			float diff = (arg!=NULL && *arg != (char)NULL)?(float)atof(arg):1.0f;
+	} else if (!strcmp(cmd, "TS3_VOLUME_DOWN")) {
+		if (IsConnected(scHandlerID)) {
+			float diff = (arg != NULL && *arg != (char)NULL) ? (float)atof(arg) : 1.0f;
 			float value;
 			ts3Functions.getPlaybackConfigValueAsFloat(scHandlerID, "volume_modifier", &value);
-			gkeyFunctions.SetMasterVolume(scHandlerID, value-diff);
+			gkeyFunctions.SetMasterVolume(scHandlerID, value - diff);
 		}
-	}
-	else if(!strcmp(cmd, "TS3_VOLUME_SET"))
-	{
-		if(IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_VOLUME_SET")) {
+		if (IsConnected(scHandlerID) && !IsArgumentEmpty(scHandlerID, arg)) {
 			float value = (float)atof(arg);
 			gkeyFunctions.SetMasterVolume(scHandlerID, value);
 		}
-	}
-	else if(!strcmp(cmd, "TS3_PLUGIN_COMMAND"))
-	{
-		if(!IsArgumentEmpty(scHandlerID, arg))
-		{
+	} else if (!strcmp(cmd, "TS3_PLUGIN_COMMAND")) {
+		if (!IsArgumentEmpty(scHandlerID, arg)) {
 			char* keyword = arg;
 			char* command = strchr(arg, ' ');
-			if(*keyword == '/') keyword++; // Skip the slash
-			if(command != NULL)
-			{
+			if (*keyword == '/') keyword++; // Skip the slash
+			if (command != NULL) {
 				// Split the string by inserting a NULL-terminator
 				*command = (char)NULL;
 				command++;
 
 				// Execute the command
-				if(!IsArgumentEmpty(scHandlerID, command))
+				if (!IsArgumentEmpty(scHandlerID, command))
 					ExecutePluginCommand(scHandlerID, keyword, command);
 			}
 		}
 	}
 	/***** Error handler *****/
-	else
-	{
-		ts3Functions.logMessage("Command not recognized:", LogLevel_WARNING, "G-Key Plugin", 0);
-		ts3Functions.logMessage(cmd, LogLevel_WARNING, "G-Key Plugin", 0);
-		gkeyFunctions.ErrorMessage(scHandlerID, "Command not recognized");
+	else {
+		//ts3Functions.logMessage("Command not recognized:", LogLevel_WARNING, "G-Key Plugin", 0);
+		//ts3Functions.logMessage(cmd, LogLevel_WARNING, "G-Key Plugin", 0);
+		//gkeyFunctions.ErrorMessage(scHandlerID, "Command not recognized");
 	}
 
 	// Release the mutex
 	ReleaseMutex(hMutex);
 }
 
-int GetLogitechProcessId(LPDWORD ProcessId)
-{
+int GetLogitechProcessId(LPDWORD ProcessId) {
 	PROCESSENTRY32 entry;
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, (DWORD)NULL);
 
 	entry.dwSize = sizeof(PROCESSENTRY32);
 
-	if(Process32First(snapshot, &entry))
-	{
-		while(Process32Next(snapshot, &entry))
-		{
-			if(!strcmp(entry.szExeFile, "LCore.exe"))
+	if (Process32First(snapshot, &entry)) {
+		while (Process32Next(snapshot, &entry)) {
+			if (!strcmp(entry.szExeFile, "LCore.exe")) {
+				*ProcessId = entry.th32ProcessID;
+				CloseHandle(snapshot);
+				return 0;
+			} else if (!strcmp(entry.szExeFile, "LGDCore.exe")) // Legacy support
 			{
 				*ProcessId = entry.th32ProcessID;
 				CloseHandle(snapshot);
 				return 0;
 			}
-			else if(!strcmp(entry.szExeFile, "LGDCore.exe")) // Legacy support
-			{
-				*ProcessId = entry.th32ProcessID;
-				CloseHandle(snapshot);
-				return 0;
-			} 
 		}
 	}
 
@@ -734,35 +569,29 @@ int GetLogitechProcessId(LPDWORD ProcessId)
 	return 1; // No processes found
 }
 
-void DebugMain(DWORD ProcessId, HANDLE hProcess)
-{
+void DebugMain(DWORD ProcessId, HANDLE hProcess) {
 	DEBUG_EVENT DebugEv; // Buffer for debug messages
 
 	// While the plugin is running
-	while(pluginRunning)
-	{
+	while (pluginRunning) {
 		// Wait for a debug message
-		if(WaitForDebugEvent(&DebugEv, PLUGIN_THREAD_TIMEOUT))
-		{
+		if (WaitForDebugEvent(&DebugEv, PLUGIN_THREAD_TIMEOUT)) {
 			// If the debug message is from the logitech driver
-			if(DebugEv.dwProcessId == ProcessId)
-			{
+			if (DebugEv.dwProcessId == ProcessId) {
 				// If this is a debug message and it uses ANSI
-				if(DebugEv.dwDebugEventCode == OUTPUT_DEBUG_STRING_EVENT && !DebugEv.u.DebugString.fUnicode)
-				{
+				if (DebugEv.dwDebugEventCode == OUTPUT_DEBUG_STRING_EVENT && !DebugEv.u.DebugString.fUnicode) {
 					char *DebugStr, *arg;
 
 					// Retrieve debug string
 					DebugStr = (char*)malloc(DebugEv.u.DebugString.nDebugStringLength);
 					ReadProcessMemory(hProcess, DebugEv.u.DebugString.lpDebugStringData, DebugStr, DebugEv.u.DebugString.nDebugStringLength, NULL);
-					
+
 					// Continue the process
 					ContinueDebugEvent(DebugEv.dwProcessId, DebugEv.dwThreadId, DBG_CONTINUE);
 
 					// Seperate the argument from the command
 					arg = strchr(DebugStr, ' ');
-					if(arg != NULL)
-					{
+					if (arg != NULL) {
 						// Split the string by inserting a NULL-terminator
 						*arg = (char)NULL;
 						arg++;
@@ -773,20 +602,14 @@ void DebugMain(DWORD ProcessId, HANDLE hProcess)
 
 					// Free the debug string
 					free(DebugStr);
-				}
-				else if(DebugEv.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT)
-				{
+				} else if (DebugEv.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT) {
 					// The process is shutting down, exit the debugger
 					return;
-				}
-				else if(DebugEv.dwDebugEventCode == EXCEPTION_DEBUG_EVENT && DebugEv.u.Exception.ExceptionRecord.ExceptionCode != STATUS_BREAKPOINT)
-				{
+				} else if (DebugEv.dwDebugEventCode == EXCEPTION_DEBUG_EVENT && DebugEv.u.Exception.ExceptionRecord.ExceptionCode != STATUS_BREAKPOINT) {
 					// The process has crashed, exit the debugger
 					return;
-				}
-				else ContinueDebugEvent(DebugEv.dwProcessId, DebugEv.dwThreadId, DBG_CONTINUE); // Continue the process
-			}
-			else ContinueDebugEvent(DebugEv.dwProcessId, DebugEv.dwThreadId, DBG_CONTINUE); // Continue the process
+				} else ContinueDebugEvent(DebugEv.dwProcessId, DebugEv.dwThreadId, DBG_CONTINUE); // Continue the process
+			} else ContinueDebugEvent(DebugEv.dwProcessId, DebugEv.dwThreadId, DBG_CONTINUE); // Continue the process
 		}
 	}
 }
@@ -797,46 +620,66 @@ void DebugMain(DWORD ProcessId, HANDLE hProcess)
  * the shutdown procedure will not wait that long for the thread to exit.
  */
 
-DWORD WINAPI DebugThread(LPVOID pData)
-{
-	DWORD ProcessId; // Process ID for the Logitech software
-	HANDLE hProcess; // Handle for the Logitech software
+DWORD WINAPI DebugThread(LPVOID pData) {
+	HANDLE hPipe;
+	auto pipeName = TEXT("\\\\.\\pipe\\LogitechHook");
+	while (1) {
+		hPipe = CreateFile(
+			pipeName,
+			GENERIC_READ,
+			0,
+			NULL,
+			OPEN_EXISTING,
+			FILE_ATTRIBUTE_NORMAL,
+			NULL);
 
-	// Get process id of the logitech software
-	if(GetLogitechProcessId(&ProcessId))
-	{
-		ts3Functions.logMessage("Could not find Logitech software", LogLevel_ERROR, "G-Key Plugin", 0);
-		pluginRunning = FALSE;
-		return PLUGIN_ERROR_NOT_FOUND;
+		if (hPipe != INVALID_HANDLE_VALUE)
+			break;
+
+		if (GetLastError() != ERROR_PIPE_BUSY) {
+			ts3Functions.logMessage("Failed to open Logitech pipe for reading", LogLevel_ERROR, "G-Key Plugin", 0);
+			return PLUGIN_ERROR_NOT_FOUND;
+		}
+
+		if (!WaitNamedPipe(pipeName, 5000)) {
+			ts3Functions.logMessage("Failed to open Logitech pipe for reading", LogLevel_ERROR, "G-Key Plugin", 0);
+			return PLUGIN_ERROR_READ_FAILED;
+		}
 	}
 
-	// Open a read memory handle to the Logitech software
-	hProcess = OpenProcess(PROCESS_VM_READ, FALSE, ProcessId);
-	if(hProcess==NULL)
-	{
-		ts3Functions.logMessage("Failed to open Logitech software for reading", LogLevel_ERROR, "G-Key Plugin", 0);
-		pluginRunning = FALSE;
-		return PLUGIN_ERROR_READ_FAILED;
-	}
+	ts3Functions.logMessage("Logitech pipe connected", LogLevel_INFO, "G-Key Plugin", 0);
+	bool success = false;
+	const auto bufferSize = 4096;
+	wchar_t buffer[bufferSize];
+	do {
+		DWORD amountRead = 0;
+		success = ReadFile(
+			hPipe,    // pipe handle 
+			buffer,    // buffer to receive reply 
+			bufferSize*sizeof(wchar_t),  // size of buffer 
+			&amountRead,  // number of bytes read 
+			NULL) == 1;    // not overlapped 
 
-	// Attach debugger to Logitech software
-	if(!DebugActiveProcess(ProcessId))
-	{
-		// Could not attach debugger, exit debug thread
-		ts3Functions.logMessage("Failed to attach debugger", LogLevel_ERROR, "G-Key Plugin", 0);
-		pluginRunning = FALSE;
-		return PLUGIN_ERROR_HOOK_FAILED;
-	}
+		if (!success && GetLastError() != ERROR_MORE_DATA)
+			break;
 
-	ts3Functions.logMessage("Debugger attached to Logitech software", LogLevel_INFO, "G-Key Plugin", 0);
-	DebugMain(ProcessId, hProcess);
+		size_t messageLength = *((short*)buffer);
+		std::string message((const char*)(buffer + 2), messageLength);
+		auto spaceLocation = message.find(' ');
+		std::string cmd = message;
+		std::string arg = "";
+		if (spaceLocation != std::string::npos) {
+			cmd = message.substr(0, spaceLocation);
+			arg = message.substr(spaceLocation, message.length() - spaceLocation);
+		}
+		//std::ostringstream strbld;
+		//strbld << "Command: \"" << cmd.c_str() << "\" : \"" << arg.c_str() << "\"";
+		//ts3Functions.logMessage(strbld.str().c_str(), LogLevel_INFO, "G-Key Plugin", 0);
+		ParseCommand(cmd.c_str(), arg.c_str());
+	} while (pluginRunning);
 
-	// Dettach the debugger
-	DebugActiveProcessStop(ProcessId);
-	ts3Functions.logMessage("Debugger detached from Logitech software", LogLevel_INFO, "G-Key Plugin", 0);
-
-	// Close the handle to the Logitech software
-	CloseHandle(hProcess);
+	CloseHandle(hPipe);
+	ts3Functions.logMessage("Logitech pipe closed", LogLevel_INFO, "G-Key Plugin", 0);
 
 	return PLUGIN_ERROR_NONE;
 }
@@ -848,12 +691,12 @@ DWORD WINAPI DebugThread(LPVOID pData)
 
 /* Unique name identifying this plugin */
 const char* ts3plugin_name() {
-    return "G-Key Plugin";
+	return "G-Key Plugin";
 }
 
 /* Plugin version */
 const char* ts3plugin_version() {
-    return "0.6.0";
+	return "0.6.0";
 }
 
 /* Plugin API version. Must be the same as the clients API major version, else the plugin fails to load. */
@@ -863,17 +706,17 @@ int ts3plugin_apiVersion() {
 
 /* Plugin author */
 const char* ts3plugin_author() {
-    return "Jules Blok";
+	return "Jules Blok";
 }
 
 /* Plugin description */
 const char* ts3plugin_description() {
-    return "This plugin allows you to use the macro G-keys on any Logitech device to control TeamSpeak 3 without rebinding them to other keys.\n\nPlease read the G-Key ReadMe for instructions by pressing the Settings button, or read it online at http://jules.aerix.nl/g-key";
+	return "This plugin allows you to use the macro G-keys on any Logitech device to control TeamSpeak 3 without rebinding them to other keys.\n\nPlease read the G-Key ReadMe for instructions by pressing the Settings button, or read it online at http://jules.aerix.nl/g-key";
 }
 
 /* Set TeamSpeak 3 callback functions */
 void ts3plugin_setFunctionPointers(const struct TS3Functions funcs) {
-    ts3Functions = funcs;
+	ts3Functions = funcs;
 }
 
 /*
@@ -901,8 +744,7 @@ int ts3plugin_init() {
 	pluginRunning = true;
 	hDebugThread = CreateThread(NULL, (SIZE_T)NULL, DebugThread, 0, 0, NULL);
 
-	if(hDebugThread==NULL)
-	{
+	if (hDebugThread == NULL) {
 		ts3Functions.logMessage("Failed to start threads, unloading plugin", LogLevel_ERROR, "G-Key Plugin", 0);
 		return 1;
 	}
@@ -910,7 +752,7 @@ int ts3plugin_init() {
 	/* Initialize return codes array for requestClientMove */
 	memset(requestClientMoveReturnCodes, 0, REQUESTCLIENTMOVERETURNCODES_SLOTS * RETURNCODE_BUFSIZE);
 
-    return 0;  /* 0 = success, 1 = failure */
+	return 0;  /* 0 = success, 1 = failure */
 }
 
 /* Custom code called right before the plugin is unloaded */
@@ -920,7 +762,7 @@ void ts3plugin_shutdown() {
 
 	// Close settings database
 	ts3Settings.CloseDatabase();
-	
+
 	// Cancel PTT delay timer
 	CancelWaitableTimer(hPttDelayTimer);
 
@@ -934,7 +776,7 @@ void ts3plugin_shutdown() {
 	 */
 
 	/* Free pluginID if we registered it */
-	if(pluginID) {
+	if (pluginID) {
 		free(pluginID);
 		pluginID = NULL;
 	}
@@ -984,13 +826,12 @@ const char* ts3plugin_commandKeyword() {
 /* Plugin processes console command. Return 0 if plugin handled the command, 1 if not handled. */
 int ts3plugin_processCommand(uint64 serverConnectionHandlerID, const char* command) {
 	size_t length = strlen(command);
-	char* str = (char*)malloc(length+1);
-	_strcpy(str, length+1, command);
+	char* str = (char*)malloc(length + 1);
+	_strcpy(str, length + 1, command);
 
 	// Seperate the argument from the command
 	char* arg = strchr(str, ' ');
-	if(arg != NULL)
-	{
+	if (arg != NULL) {
 		// Split the string by inserting a NULL-terminator
 		*arg = (char)NULL;
 		arg++;
@@ -1042,19 +883,15 @@ int ts3plugin_requestAutoload() {
 
 /* Show an error message if the plugin failed to load */
 void ts3plugin_onConnectStatusChangeEvent(uint64 serverConnectionHandlerID, int newStatus, unsigned int errorNumber) {
-    if(newStatus == STATUS_CONNECTION_ESTABLISHED)
-	{
-		if(!pluginRunning) 
-		{
+	if (newStatus == STATUS_CONNECTION_ESTABLISHED) {
+		if (!pluginRunning) {
 			DWORD errorCode;
-			if(GetExitCodeThread(hDebugThread, &errorCode) && errorCode != PLUGIN_ERROR_NONE)
-			{
-				switch(errorCode)
-				{
-					case PLUGIN_ERROR_HOOK_FAILED: gkeyFunctions.ErrorMessage(serverConnectionHandlerID, "Could not hook into Logitech software, make sure you're using the 64-bit version"); break;
-					case PLUGIN_ERROR_READ_FAILED: gkeyFunctions.ErrorMessage(serverConnectionHandlerID, "Not enough permissions to hook into Logitech software, try running as as administrator"); break;
-					case PLUGIN_ERROR_NOT_FOUND: gkeyFunctions.ErrorMessage(serverConnectionHandlerID, "Logitech software not running, start the Logitech software and reload the G-Key Plugin"); break;
-					default: gkeyFunctions.ErrorMessage(serverConnectionHandlerID, "G-Key Plugin failed to start, check the clientlog for more info"); break;
+			if (GetExitCodeThread(hDebugThread, &errorCode) && errorCode != PLUGIN_ERROR_NONE) {
+				switch (errorCode) {
+				case PLUGIN_ERROR_HOOK_FAILED: gkeyFunctions.ErrorMessage(serverConnectionHandlerID, "Could not hook into Logitech software, make sure you're using the 64-bit version"); break;
+				case PLUGIN_ERROR_READ_FAILED: gkeyFunctions.ErrorMessage(serverConnectionHandlerID, "Not enough permissions to hook into Logitech software, try running as as administrator"); break;
+				case PLUGIN_ERROR_NOT_FOUND: gkeyFunctions.ErrorMessage(serverConnectionHandlerID, "Logitech software not running, start the Logitech software and reload the G-Key Plugin"); break;
+				default: gkeyFunctions.ErrorMessage(serverConnectionHandlerID, "G-Key Plugin failed to start, check the clientlog for more info"); break;
 				}
 			}
 		}
@@ -1063,5 +900,5 @@ void ts3plugin_onConnectStatusChangeEvent(uint64 serverConnectionHandlerID, int 
 
 /* Add whisper clients to reply list */
 void ts3plugin_onTalkStatusChangeEvent(uint64 serverConnectionHandlerID, int status, int isReceivedWhisper, anyID clientID) {
-	if(isReceivedWhisper) gkeyFunctions.ReplyAddClient(gkeyFunctions.GetActiveServerConnectionHandlerID(), clientID);
+	if (isReceivedWhisper) gkeyFunctions.ReplyAddClient(gkeyFunctions.GetActiveServerConnectionHandlerID(), clientID);
 }
