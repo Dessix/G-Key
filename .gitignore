@@ -1,7 +1,13 @@
 /bin
 /Debug
+/Release
 /plugins
 /ipch
 *.user
 *.sdf
-
+*.opensdf
+*.tlog
+*.log
+*.obj
+*.pdb
+*.lastbuildstate
