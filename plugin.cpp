@@ -6,12 +6,15 @@
  * Copyright (c) 2008-2012 TeamSpeak Systems GmbH
  */
 
+#include <WinSock2.h>
+
 #ifdef _WIN32
 #pragma warning (disable : 4100)  /* Disable Unreferenced parameter warning */
 #include <Windows.h>
 #include <TlHelp32.h>
 #endif
 
+#include "zmq\cppzmq\zmq.hpp"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -621,50 +624,20 @@ void DebugMain(DWORD ProcessId, HANDLE hProcess) {
  */
 
 DWORD WINAPI DebugThread(LPVOID pData) {
-	HANDLE hPipe;
-	auto pipeName = TEXT("\\\\.\\pipe\\LogitechHook");
-	while (1) {
-		hPipe = CreateFile(
-			pipeName,
-			GENERIC_READ,
-			0,
-			NULL,
-			OPEN_EXISTING,
-			FILE_ATTRIBUTE_NORMAL,
-			NULL);
+	ts3Functions.logMessage("Creating ZMQ Socket...", LogLevel_INFO, "G-Key Plugin", 0);
+	auto zmq = zmq::context_t();
+	auto subsock = zmq::socket_t(zmq, ZMQ_SUB);
+	subsock.connect("tcp://127.0.0.1:10315");
+	subsock.setsockopt(ZMQ_SUBSCRIBE, nullptr, 0);
 
-		if (hPipe != INVALID_HANDLE_VALUE)
-			break;
+	ts3Functions.logMessage("ZMQ Socket connected", LogLevel_INFO, "G-Key Plugin", 0);
 
-		if (GetLastError() != ERROR_PIPE_BUSY) {
-			ts3Functions.logMessage("Failed to open Logitech pipe for reading", LogLevel_ERROR, "G-Key Plugin", 0);
-			return PLUGIN_ERROR_NOT_FOUND;
-		}
-
-		if (!WaitNamedPipe(pipeName, 5000)) {
-			ts3Functions.logMessage("Failed to open Logitech pipe for reading", LogLevel_ERROR, "G-Key Plugin", 0);
-			return PLUGIN_ERROR_READ_FAILED;
-		}
-	}
-
-	ts3Functions.logMessage("Logitech pipe connected", LogLevel_INFO, "G-Key Plugin", 0);
-	bool success = false;
-	const auto bufferSize = 4096;
-	wchar_t buffer[bufferSize];
 	do {
-		DWORD amountRead = 0;
-		success = ReadFile(
-			hPipe,    // pipe handle 
-			buffer,    // buffer to receive reply 
-			bufferSize*sizeof(wchar_t),  // size of buffer 
-			&amountRead,  // number of bytes read 
-			NULL) == 1;    // not overlapped 
-
-		if (!success && GetLastError() != ERROR_MORE_DATA)
-			break;
-
-		size_t messageLength = *((short*)buffer);
-		std::string message((const char*)(buffer + 2), messageLength);
+		auto msg = zmq::message_t();
+		ts3Functions.logMessage("Receiving...", LogLevel_INFO, "G-Key Plugin", 0);
+		subsock.recv(&msg);
+		ts3Functions.logMessage("Received", LogLevel_INFO, "G-Key Plugin", 0);
+		std::string message((const char*)msg.data(), msg.size());
 		auto spaceLocation = message.find(' ');
 		std::string cmd = message;
 		std::string arg = "";
@@ -678,8 +651,9 @@ DWORD WINAPI DebugThread(LPVOID pData) {
 		ParseCommand(cmd.c_str(), arg.c_str());
 	} while (pluginRunning);
 
-	CloseHandle(hPipe);
-	ts3Functions.logMessage("Logitech pipe closed", LogLevel_INFO, "G-Key Plugin", 0);
+	ts3Functions.logMessage("Closing ZMQ Socket...", LogLevel_INFO, "G-Key Plugin", 0);
+	subsock.close();
+	ts3Functions.logMessage("ZMQ Socket closed", LogLevel_INFO, "G-Key Plugin", 0);
 
 	return PLUGIN_ERROR_NONE;
 }
